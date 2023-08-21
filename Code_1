@@ -1,0 +1,85 @@
+#include <Wire.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial bluetoothSerial(10, 11); // RX, TX pins for HC-05
+
+const int MPU_ADDR = 0x68; // I2C address of the MPU6050
+const int methanePin = A0;
+
+int16_t accelerometerX, accelerometerY, accelerometerZ;
+int steps = 0;
+int previousReading = 0;
+
+void setup() {
+  Serial.begin(9600);
+  bluetoothSerial.begin(9600); // Set baud rate for Bluetooth communication
+
+  Wire.begin();
+  initializeMPU6050();
+
+  pinMode(methanePin, INPUT);
+}
+
+void loop() {
+  readSteps();
+  readMethane();
+
+  Serial.print("Steps: ");
+  Serial.print(steps);
+  Serial.print("\tMethane Level: ");
+  Serial.println(analogRead(methanePin));
+
+  // Send data to phone via Bluetooth
+  bluetoothSerial.print("Steps: ");
+  bluetoothSerial.print(steps);
+  bluetoothSerial.print("\tMethane Level: ");
+  bluetoothSerial.println(analogRead(methanePin));
+
+  delay(1000);
+}
+
+void initializeMPU6050() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B); // PWR_MGMT_1 register
+  Wire.write(0);    // Set to zero (wakes up the MPU6050)
+  Wire.endTransmission(true);
+}
+
+void readMPU6050() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B); // Starting register address for accelerometer data
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 6, true); // Request 6 bytes (3 axes * 2 bytes each)
+
+  accelerometerX = Wire.read() << 8 | Wire.read();
+  accelerometerY = Wire.read() << 8 | Wire.read();
+  accelerometerZ = Wire.read() << 8 | Wire.read();
+}
+
+void readSteps() {
+  readMPU6050();
+  int currentReading = abs(accelerometerX) + abs(accelerometerY) + abs(accelerometerZ);
+
+  if (currentReading > previousReading) {
+    steps++;
+  }
+
+  previousReading = currentReading;
+}
+
+void readMethane() {
+  int methaneReading = analogRead(methanePin);
+
+  // Perform any necessary calibration or adjustment to the methane reading
+  // For example, you can subtract the baseline reading or apply a calibration factor
+
+  // Convert the analog reading to a methane level value
+  float methaneLevel = map(methaneReading, 0, 1023, 0, 100);  // Assuming a range from 0 to 100
+
+  Serial.print("Methane Level (%): ");
+  Serial.println(methaneLevel);
+
+  // Send methane level to phone via Bluetooth
+  bluetoothSerial.print("Methane Level (%): ");
+  bluetoothSerial.println(methaneLevel);
+}
